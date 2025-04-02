@@ -52,6 +52,9 @@
     "preinstall": "npx only-allow pnpm",
     "postinstall": "npx simple-git-hooks"
   },
+  "dependencies": {
+    "nanoid": "^5.1.5"
+  },
   "devDependencies": {
     "@antfu/eslint-config": "^4.2.0",
     "@cloudflare/vitest-pool-workers": "^0.8.8",
