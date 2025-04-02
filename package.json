@@ -1,18 +1,18 @@
 {
-  "name": "cloudflare-starter",
+  "name": "web-rtc-server",
   "type": "module",
   "version": "0.0.1",
   "description": "",
   "author": "oiij",
   "license": "MIT",
-  "homepage": "https://github.com/oiij/cloudflare-starter",
+  "homepage": "https://github.com/oiij/web-rtc-server",
   "repository": {
     "type": "git",
-    "url": "git@github.com:oiij/cloudflare-starter.git"
+    "url": "git@github.com:oiij/web-rtc-server.git"
   },
-  "bugs": "https://github.com/oiij/cloudflare-starter/issues",
+  "bugs": "https://github.com/oiij/web-rtc-server/issues",
   "keywords": [
-    "cloudflare-starter"
+    "web-rtc-server"
   ],
   "sideEffects": false,
   "exports": {
