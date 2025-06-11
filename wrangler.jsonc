@@ -9,7 +9,23 @@
   "compatibility_date": "2025-03-27",
   "observability": {
     "enabled": true
-  }
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WEBSOCKET_SERVER", // 与类型声明中的名称一致
+        "class_name": "WebSocketServer" // 后续要实现的 Durable Object 类名
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "WebSocketServer"
+      ]
+    }
+  ]
   /**
    * Smart Placement
    * Docs: https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

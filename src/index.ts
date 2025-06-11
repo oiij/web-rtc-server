@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+import { DurableObject } from 'cloudflare:workers'
 /**
  * Welcome to Cloudflare Workers! This is your first worker.
  *
@@ -10,167 +12,58 @@
  *
  * Learn more at https://developers.cloudflare.com/workers/
  */
-import { nanoid } from 'nanoid'
+import { closeHandler, messageHandler, registerHandler } from './web-rtc-server'
 
-interface MessageEvent {
-  type: 'register' | 'offer' | 'answer' | 'answer-ok' | 'ice-candidate' | 'error'
-  payload: {
-    key?: string
-    desc?: RTCSessionDescription
-    candidate?: RTCIceCandidate
-    message?: string
-  }
+export interface Env {
+  WEBSOCKET_SERVER: DurableObjectNamespace<WebSocketServer>
 }
-const socketMap = new Map<string, WebSocket>()
-function createDebug(debug: boolean) {
-  return function (msg: string, type?: 'info' | 'error') {
-    if (!debug)
-      return
-    switch (type) {
-      case 'info':
-        // eslint-disable-next-line no-console
-        return console.info(msg)
-      case 'error':
 
-        return console.error(msg)
-      default:
-        // eslint-disable-next-line no-console
-        return console.log(msg)
+export class WebSocketServer extends DurableObject {
+  private sockets: Map<string, WebSocket> = new Map()
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env)
+    this.sockets = new Map()
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const upgradeHeader = request.headers.get('Upgrade')
+    if (upgradeHeader !== 'websocket') {
+      return new Response('Expected websocket', { status: 400 })
     }
-  }
-}
-function getSocket(key?: string) {
-  return key ? socketMap.get(key) : undefined
-}
-function createId(str: string = nanoid(6)) {
-  const timeStamp = Date.now().toString()
-  return `${nanoid(6)}-${timeStamp.slice(timeStamp.length - 6, timeStamp.length)}-${nanoid(6)}-${str.slice(0, 6)}`
-}
-async function handleSession(request: Request, socket: WebSocket) {
-  socket.accept()
+    const webSocketPair = new WebSocketPair()
+    const [client, server] = Object.values(webSocketPair)
+    server.accept()
+    const socketMap = this.sockets
 
-  const debugLog = createDebug(true)
-  function sendMessage(data: MessageEvent) {
-    socket.send(JSON.stringify(data))
-  }
-  const secKey = request.headers.get('sec-websocket-key')
-  if (!secKey) {
-    debugLog('sec-websocket-key not found')
-    sendMessage({
-      type: 'error',
-      payload: { message: 'sec-websocket-key not found' },
+    const secKey = request.headers.get('sec-websocket-key')
+
+    if (secKey) {
+      const { selfKey } = registerHandler(secKey, server, socketMap)
+      server.addEventListener('message', (ev) => {
+        messageHandler(ev, selfKey, server, socketMap)
+      })
+      server.addEventListener('close', () => {
+        console.log('socket close')
+        closeHandler(selfKey, socketMap)
+      })
+    }
+
+    return new Response(null, {
+      status: 101,
+      webSocket: client,
     })
-    return
   }
-  const key = createId(secKey)
-  if (!socketMap.has(key)) {
-    socketMap.set(key, socket)
-  }
-  sendMessage({
-    type: 'register',
-    payload: {
-      key,
-    },
-  })
-  socket.addEventListener('message', (dataRaw) => {
-    try {
-      const { type, payload } = JSON.parse(dataRaw.toString()) as MessageEvent
-      const { key: targetKey, desc, candidate } = payload
-      switch (type) {
-        case 'offer':
-          {
-            const target = getSocket(targetKey)
-            if (!target) {
-              return
-            }
-            sendMessage({
-              type: 'offer',
-              payload: {
-                key,
-                desc,
-              },
-            })
-          }
-
-          break
-        case 'answer':
-          {
-            const target = getSocket(targetKey)
-            if (!target) {
-              debugLog(`answer targetIns not found ${targetKey}`)
-              return
-            }
-            sendMessage({
-              type: 'answer',
-              payload: {
-                key: targetKey,
-                desc,
-              },
-            })
-          }
-
-          break
-        case 'answer-ok':
-          {
-            const target = getSocket(targetKey)
-            if (!target) {
-              debugLog(`answer-ok targetIns not found ${targetKey}`)
-              return
-            }
-            sendMessage({
-              type: 'answer-ok',
-              payload: {
-                key,
-              },
-            })
-          }
-          break
-        case 'ice-candidate':
-          socketMap.entries().forEach(([_key, _socket]) => {
-            if (_key === key)
-              return
-            sendMessage({
-              type: 'ice-candidate',
-              payload: {
-                key,
-                candidate,
-              },
-            })
-          })
-          break
-        default:
-          break
-      }
-    }
-    catch (error: any) {
-      debugLog(error.toString(), 'error')
-    }
-  })
-  socket.addEventListener('close', () => {
-    debugLog('socket close')
-  })
 }
-async function websocketHandler(request: Request) {
-  const upgradeHeader = request.headers.get('Upgrade')
-  if (upgradeHeader !== 'websocket') {
-    return new Response('Expected websocket', { status: 400 })
-  }
 
-  const [client, server] = Object.values(new WebSocketPair())
-
-  await handleSession(request, server)
-
-  return new Response(null, {
-    status: 101,
-    webSocket: client,
-  })
-}
 export default {
-  async fetch(request, _env, _ctx): Promise<Response> {
+  async fetch(request, env, _ctx): Promise<Response> {
     try {
       const url = new URL(request.url)
       if (url.pathname === '/ws') {
-        return websocketHandler(request)
+        const id = env.WEBSOCKET_SERVER.idFromName('foo')
+        const stub = env.WEBSOCKET_SERVER.get(id)
+        return stub.fetch(request)
       }
       return new Response('Not found', { status: 404 })
     }
